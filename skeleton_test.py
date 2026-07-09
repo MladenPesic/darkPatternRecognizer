@@ -3,8 +3,9 @@ from google import genai
 from dotenv import load_dotenv
 import os
 import psycopg
+from supabase import Client, create_client
 
-load_dotenv()
+load_dotenv(override=True)
 
 def fetch_url(url:str,output_dir='data/raw/'):
 
@@ -56,24 +57,44 @@ def get_llm_report(model:str,html_text):
     report = response.text
     return report
 
-def update_database(url,html_path,screenshot_path,report):
+def upload_files_to_storage(html_path,screenshot_path):
+    supabase_url = os.getenv('SUPABASE_PROJECT_URL')
+    supabase_key = os.getenv('SUPABASE_KEY')
+
+    supabase:Client = create_client(supabase_url,supabase_key)
+
+    path_pointers = []
+    for path in [html_path,screenshot_path]:
+        with open(path,'rb') as file_data:
+            response = supabase.storage.from_('scans').upload(
+                path = path.split('/')[-1],
+                file = file_data,
+                file_options={'cache-control':'3600','upsert':'false'}
+            )
+            path_pointers.append(response.fullPath)
+    return path_pointers
+
+def save_scan(url,html_pointer,screenshot_pointer,report):
+
     with psycopg.connect(os.getenv('DATABASE_URL')) as conn:
         with conn.cursor() as cur:
 
             cur.execute("""
             INSERT INTO scans (url,html_pointer,screenshot_pointer,llm_report) VALUES
             (%s,%s,%s,%s)
-            """,(url,html_path,screenshot_path,report))
+            """,(url,html_pointer,screenshot_pointer,report))
 
             conn.commit()
 
 def main(url,model):
     html_path, screenshot_path, html_text = fetch_url(url)
     report = get_llm_report(model,html_text)
-    update_database(url,html_path,screenshot_path,report)
-    return print(f'Database updated with the report: \n\n {report}')
+    html_pointer, screenshot_pointer = upload_files_to_storage(html_path, screenshot_path)
+    save_scan(url,html_pointer,screenshot_pointer,report)
+    print(f'Database updated with the report: \n\n {report}')
 
 if __name__ == '__main__':
     url = 'https://swappko.com/'
     model = 'gemini-3.1-flash-lite'
     main(url,model)
+
