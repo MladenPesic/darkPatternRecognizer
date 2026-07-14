@@ -5,5 +5,5 @@ CREATE TABLE IF NOT EXISTS scans (
     html_pointer TEXT,
     screenshot_pointer TEXT,
     llm_report TEXT,
-    status TEXT NOT NULL DEFAULT "pending"
+    status TEXT NOT NULL DEFAULT 'pending'
     );
