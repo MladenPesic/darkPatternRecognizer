@@ -5,35 +5,22 @@ import os
 import psycopg
 from supabase import Client, create_client
 
+
 load_dotenv(override=True)
 
-def fetch_url(url:str,output_dir='data/raw/'):
-
-    output_dir = output_dir
+def fetch_url(url:str):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         page = browser.new_page()
         page.goto(url)
 
-        page_name = url.split('/')[-2].split('.')[0]
-
         html_content = page.content()
-
-        html_path = f'{output_dir}{page_name}_html_content.html'
-        with open(html_path,'w',encoding='utf-8') as f:
-            f.write(html_content)
-
         html_text = page.inner_text('body')
-
-        with open(f'{output_dir}{page_name}_html_text.txt','w',encoding='utf-8') as f:
-            f.write(html_text)
-
-        screenshot_path = f'{output_dir}{page_name}_snapshot.png'
-        page.screenshot(path=screenshot_path,full_page=True)
+        screenshot = page.screenshot(full_page=True)
 
         browser.close()
-    return html_path, screenshot_path, html_text
+    return  html_text,html_content,screenshot
 
 def get_llm_report(model:str,html_text):
 
@@ -57,41 +44,79 @@ def get_llm_report(model:str,html_text):
     report = response.text
     return report
 
-def upload_files_to_storage(html_path,screenshot_path):
+def upload_files_to_storage(html_content,screenshot,new_id):
     supabase_url = os.getenv('SUPABASE_PROJECT_URL')
     supabase_key = os.getenv('SUPABASE_KEY')
 
     supabase:Client = create_client(supabase_url,supabase_key)
 
+    html_bytes = html_content.encode('utf-8')
+
+    files_to_upload = [
+        (html_bytes,'html.html'),
+        (screenshot,'screenshot.png')
+    ]
+
     path_pointers = []
-    for path in [html_path,screenshot_path]:
-        with open(path,'rb') as file_data:
-            response = supabase.storage.from_('scans').upload(
-                path = path.split('/')[-1],
-                file = file_data,
-                file_options={'cache-control':'3600','upsert':'false'}
-            )
-            path_pointers.append(response.fullPath)
+    for data,extension in files_to_upload:
+        response = supabase.storage.from_('scans').upload(
+            path = f'{new_id}_{extension}',
+            file = data,
+            file_options={'cache-control':'3600','upsert':'false'}
+        )
+        path_pointers.append(response.fullPath)
     return path_pointers
 
-def save_scan(url,html_pointer,screenshot_pointer,report):
 
+def insert_scan_row(url):
     with psycopg.connect(os.getenv('DATABASE_URL')) as conn:
         with conn.cursor() as cur:
 
             cur.execute("""
-            INSERT INTO scans (url,html_pointer,screenshot_pointer,llm_report) VALUES
-            (%s,%s,%s,%s)
-            """,(url,html_pointer,screenshot_pointer,report))
+            INSERT INTO scans (url) VALUES
+            (%s) RETURNING id
+            """,(url,))
 
-            conn.commit()
+            row = cur.fetchone()
+            new_id = row[0]
+            return new_id
+
+def update_scan_row(html_pointer,screenshot_pointer,report,new_id,status):
+    with psycopg.connect(os.getenv('DATABASE_URL')) as conn:
+        with conn.cursor() as cur:
+
+            cur.execute("""
+            UPDATE scans
+            SET 
+                html_pointer = %s,
+                screenshot_pointer = %s,
+                llm_report = %s,
+                status = %s
+            WHERE id = %s
+            """,(html_pointer,screenshot_pointer,report,status,new_id))
+
+def mark_failed(new_id):
+    with psycopg.connect(os.getenv('DATABASE_URL')) as conn:
+        with conn.cursor() as cur:
+
+            cur.execute("""
+            UPDATE scans
+            SET status = 'failed'
+            WHERE id = %s
+            """,(new_id,))
 
 def main(url,model):
-    html_path, screenshot_path, html_text = fetch_url(url)
-    report = get_llm_report(model,html_text)
-    html_pointer, screenshot_pointer = upload_files_to_storage(html_path, screenshot_path)
-    save_scan(url,html_pointer,screenshot_pointer,report)
-    print(f'Database updated with the report: \n\n {report}')
+    new_id = insert_scan_row(url)
+    try:
+        html_text,html_content,screenshot = fetch_url(url)
+        report = get_llm_report(model,html_text)
+        html_pointer,screenshot_pointer = upload_files_to_storage(html_content,screenshot,new_id)
+        update_scan_row(html_pointer,screenshot_pointer,report,new_id,'completed')
+        print(f'Database updated with the report: \n\n {report}')
+    except Exception as e:
+        print(e)
+        mark_failed(new_id)
+
 
 if __name__ == '__main__':
     url = 'https://swappko.com/'
