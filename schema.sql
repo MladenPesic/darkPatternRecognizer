@@ -7,3 +7,15 @@ CREATE TABLE IF NOT EXISTS scans (
     llm_report TEXT,
     status TEXT NOT NULL DEFAULT 'pending'
     );
+
+
+CREATE TABLE IF NOT EXISTS elements(
+    id BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    scan_id BIGINT  NOT NULL REFERENCES scans(id),
+    element_type TEXT NOT NULL,
+    element_text TEXT,
+    geometry_x REAL,
+    geometry_y REAL,
+    geometry_width REAL,
+    geometry_height REAL
+);
