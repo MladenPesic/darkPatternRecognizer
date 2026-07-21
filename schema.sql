@@ -17,5 +17,7 @@ CREATE TABLE IF NOT EXISTS elements(
     geometry_x REAL,
     geometry_y REAL,
     geometry_width REAL,
-    geometry_height REAL
+    geometry_height REAL,
+    darkpattern_label SMALLINT,
+    confidence REAL
 );

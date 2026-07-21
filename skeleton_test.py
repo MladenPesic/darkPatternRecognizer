@@ -4,16 +4,30 @@ from dotenv import load_dotenv
 import os
 import psycopg
 from supabase import Client, create_client
-
+from classifier import predict
+import logging
 
 load_dotenv(override=True)
+
+os.makedirs('logs',exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 
 def fetch_url(url:str):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         page = browser.new_page()
-        page.goto(url,wait_until='networkidle')
+        page.goto(url,wait_until='load',timeout=60000)
+        page.wait_for_timeout(3000)
 
         elements = page.locator('button,a,h1,h2,h3').all()
 
@@ -129,35 +143,50 @@ def mark_failed(new_id):
             WHERE id = %s
             """,(new_id,))
 
+def classify_elements(extracted_data):
+    for e in extracted_data:
+        text = e['text']
+        if text:
+            label, probability = predict(text)
+            e['label'] = label
+            e['probability'] = probability
+        else:
+            e['label'] = None
+            e['probability'] = None
+
+
 def insert_elements(new_id,extracted_data):
 
-    elements_to_insert = [(new_id,e['tag'],e['text'],e['x'],e['y'],e['width'],e['height']) for e in extracted_data]
+    elements_to_insert = [(new_id,e['tag'],e['text'],e['x'],e['y'],e['width'],e['height'],e['label'],e['probability']) for e in extracted_data]
 
     with psycopg.connect(os.getenv('DATABASE_URL')) as conn:
         with conn.cursor() as cur:
             cur.executemany("""
-            INSERT INTO elements (scan_id,element_type,element_text,geometry_x,geometry_y,geometry_width,geometry_height)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO elements (scan_id,element_type,element_text,geometry_x,geometry_y,geometry_width,geometry_height,darkpattern_label,confidence)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,elements_to_insert)
 
 def main(url,model):
     new_id = insert_scan_row(url)
+    logger.info('Scan %s started for %s',new_id,url)
     try:
         html_text,html_content,screenshot,extracted_data = fetch_url(url)
+        logger.info('Scan %s fetched %d elements',new_id,len(extracted_data))
         report = get_llm_report(model,html_text)
         html_pointer,screenshot_pointer = upload_files_to_storage(html_content,screenshot,new_id)
+        classify_elements(extracted_data)
+        logger.info('Scan %s classified elements',new_id)
         insert_elements(new_id,extracted_data)
         update_scan_row(html_pointer,screenshot_pointer,report,new_id,'completed')
-        print(f'Database updated with the report: \n\n {report}')
-    except Exception as e:
-        print(e)
+        logger.info('Scan %s completed',new_id)
+    except Exception:
+        logger.exception('Scan %s failed',new_id)
         mark_failed(new_id)
 
 
 if __name__ == '__main__':
-    url = 'https://swappko.com/'
+    url = 'https://www.burlington.com/'
     model = 'gemini-3.1-flash-lite'
     main(url,model)
-
 
 
