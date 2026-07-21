@@ -29,29 +29,21 @@ def fetch_url(url:str):
         page.goto(url,wait_until='load',timeout=60000)
         page.wait_for_timeout(3000)
 
-        elements = page.locator('button,a,h1,h2,h3').all()
-
-        extracted_data = []
-
-        for e in elements:
-            tag_name = e.evaluate("el => el.tagName.toLowerCase()")
-            text_content = e.inner_text().strip()
-            box = e.bounding_box()
-            if box:
-                x = box['x']
-                y = box['y']
-                width = box['width']
-                height = box['height']
-            else:
-                x, y, width, height = None, None, None, None
-            extracted_data.append({
-                'tag': tag_name,
-                'text': text_content,
-                'x': x,
-                'y': y,
-                'width': width,
-                'height': height
-            })
+        extracted_data = page.eval_on_selector_all(
+            'button,a,h1,h2,h3',
+            '''els => els.map(el => {
+                const r = el.getBoundingClientRect();
+                const visible = r.width > 0 && r.height > 0;
+                return {
+                    tag: el.tagName.toLowerCase(),
+                    text: el.innerText..replace(/\s+/g, ' ').trim(),
+                    x: visible ? r.x + window.scrollX : null,
+                    y: visible ? r.y + window.scrollY : null,
+                    width:  visible ? r.width  : null,
+                    height: visible ? r.height : null
+                };
+            })'''
+        )
 
         html_content = page.content()
         html_text = page.inner_text('body')
@@ -185,8 +177,8 @@ def main(url,model):
 
 
 if __name__ == '__main__':
-    url = 'https://www.burlington.com/'
     model = 'gemini-3.1-flash-lite'
-    main(url,model)
+    for url in ['https://www.topshop.com/gb/topman','https://www.torrid.com','https://www.qvc.com/','https://www.wish.com/']:
+        main(url,model)
 
 
