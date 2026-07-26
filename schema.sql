@@ -19,5 +19,8 @@ CREATE TABLE IF NOT EXISTS elements(
     geometry_width REAL,
     geometry_height REAL,
     darkpattern_label SMALLINT,
-    confidence REAL
+    confidence REAL,
+    llm_label SMALLINT,
+    llm_category TEXT,
+    llm_reason TEXT
 );
