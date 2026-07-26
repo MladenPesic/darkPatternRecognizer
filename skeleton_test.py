@@ -6,6 +6,7 @@ import psycopg
 from supabase import Client, create_client
 from classifier import predict
 import logging
+import subprocess
 
 load_dotenv(override=True)
 
@@ -20,36 +21,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def capture_page(page):
+    page.wait_for_load_state('load',timeout=60000)
+    extracted_data = page.eval_on_selector_all(
+        'button,a,h1,h2,h3',
+        r'''els => els.map(el => {
+            const r = el.getBoundingClientRect();
+            const isVisible = r.width > 0 && r.height > 0;
+            return {
+                tag: el.tagName.toLowerCase(),
+                text: (el.innerText || '').replace(/\s+/g, ' ').trim(),
+                x: isVisible ? r.left + window.pageXOffset : null,
+                y: isVisible ? r.top + window.pageYOffset : null,
+                width:  isVisible ? r.width  : null,
+                height: isVisible ? r.height : null
+            };
+        })'''
+    )
 
-def fetch_url(url:str):
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        page = browser.new_page()
-        page.goto(url,wait_until='load',timeout=60000)
-        page.wait_for_timeout(3000)
-
-        extracted_data = page.eval_on_selector_all(
-            'button,a,h1,h2,h3',
-            '''els => els.map(el => {
-                const r = el.getBoundingClientRect();
-                const visible = r.width > 0 && r.height > 0;
-                return {
-                    tag: el.tagName.toLowerCase(),
-                    text: el.innerText..replace(/\s+/g, ' ').trim(),
-                    x: visible ? r.x + window.scrollX : null,
-                    y: visible ? r.y + window.scrollY : null,
-                    width:  visible ? r.width  : null,
-                    height: visible ? r.height : null
-                };
-            })'''
-        )
-
-        html_content = page.content()
-        html_text = page.inner_text('body')
-        screenshot = page.screenshot(full_page=True)
-
-        browser.close()
+    html_content = page.content()
+    html_text = page.inner_text('body')
+    screenshot = page.screenshot(full_page=True)
     return  html_text,html_content,screenshot,extracted_data
 
 def get_llm_report(model:str,html_text):
@@ -158,27 +150,50 @@ def insert_elements(new_id,extracted_data):
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,elements_to_insert)
 
-def main(url,model):
-    new_id = insert_scan_row(url)
-    logger.info('Scan %s started for %s',new_id,url)
+def process_page(page,model):
+    new_id = insert_scan_row(page.url)
+    logger.info('Scan %s started for %s',new_id,page.url)
     try:
-        html_text,html_content,screenshot,extracted_data = fetch_url(url)
+        logger.info('Scan %s capturing DOM...', new_id)
+        html_text,html_content,screenshot,extracted_data = capture_page(page)
         logger.info('Scan %s fetched %d elements',new_id,len(extracted_data))
+
         report = get_llm_report(model,html_text)
         html_pointer,screenshot_pointer = upload_files_to_storage(html_content,screenshot,new_id)
         classify_elements(extracted_data)
         logger.info('Scan %s classified elements',new_id)
+
         insert_elements(new_id,extracted_data)
         update_scan_row(html_pointer,screenshot_pointer,report,new_id,'completed')
         logger.info('Scan %s completed',new_id)
+
     except Exception:
-        logger.exception('Scan %s failed',new_id)
+        logger.exception('Scan %s (%s) failed',new_id,page.url)
         mark_failed(new_id)
+
+def main(url,model):
+    text = r'"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\Users\mladenp\chrome-debug-profile"'
+    try:
+        subprocess.Popen(text)
+    except Exception:
+        logger.exception("subprocess couldn't open")
+
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp("http://localhost:9222")
+        context = browser.contexts[0]
+        page = context.pages[0]
+        page.goto(url,wait_until='load',timeout=60000)
+        page.wait_for_timeout(3000)
+        while True:
+            cmd = input('Navigate the browser, then Enter to capture or (close) to quit:')
+            if cmd.strip().lower() == 'close':
+                break
+            process_page(page,model)
 
 
 if __name__ == '__main__':
     model = 'gemini-3.1-flash-lite'
-    for url in ['https://www.topshop.com/gb/topman','https://www.torrid.com','https://www.qvc.com/','https://www.wish.com/']:
-        main(url,model)
-
+    url = 'https://m.shein.com/'
+    #for url in ['https://www.uniqlo.com/us/en/','https://www.torrid.com','https://www.qvc.com/','https://www.wish.com/','https://www.myntra.com/','https://www.shopsy.in/','https://www.alibaba.com/']:
+    main(url,model)
 
