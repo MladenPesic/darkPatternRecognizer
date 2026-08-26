@@ -18,21 +18,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def fetch_elements():
+def fetch_elements(only_unlabeled=False):
+    query = """
+        SELECT id, element_text
+        FROM elements
+        WHERE element_text IS NOT NULL
+          AND TRIM(element_text) <> ''
+          AND geometry_width IS NOT NULL
+    """
+    if only_unlabeled:
+        query += " AND llm_label IS NULL"
+    query += " ORDER BY element_text;"
+
     with psycopg.connect(os.getenv('DATABASE_URL')) as conn:
         with conn.cursor() as cursor:
-            text="""
-            SELECT id,element_text
-            FROM elements
-            WHERE element_text IS NOT NULL
-              AND TRIM(element_text) <> ''
-              AND geometry_width IS NOT NULL
-            ORDER BY element_text; 
-            """
-
-            cursor.execute(text)
-            rows = cursor.fetchall()
-            return rows
+            cursor.execute(query)
+            return cursor.fetchall()
 
 def llm_labeler(elements_batch,model):
     client = genai.Client()
@@ -51,13 +52,32 @@ def llm_labeler(elements_batch,model):
     Return a JSON array, nothing else.
     
     EXAMPLES:
-    "Add to cart" -> label 0, category none (neutral UI)
-    "Sale Price" -> label 0, category none (static label, no tactic)
-    "#1 Bestseller" -> label 0, category none (static descriptive popularity claim)
-    "Hurry! These savings end soon" -> label 1, category urgency (manufactured time pressure)
-    "127 people are viewing this right now" -> label 1, category social_proof (fabricated real-time pressure)
-    "No thanks, I'll pay full price" -> label 1, category confirmshaming
-    "CABRRR Straight Fit Men Grey Jeans 69% off (203) Only few left" -> label 1, category scarcity (mostly-benign product listing with an embedded scarcity phrase)
+    "Add to cart" -> 0, none (neutral UI)
+    "Sale Price" -> 0, none (static label, no tactic)
+    "Cyber Sale in July" -> 0, none (a sale's NAME is not a tactic)
+    "Christmas in July Sale" -> 0, none (sale name)
+    "Currently Trending" -> 0, none (section header, descriptive)
+    "#1 Bestseller" -> 0, none (static badge, no pressure)
+    "Free shipping on orders over $50" -> 0, none (transparent offer)
+    "Hurry! These savings end soon" -> 1, urgency (manufactured time pressure)
+    "Limited-Time Offer until 7/23" -> 1, urgency (explicit deadline pressure)
+    "Sale ends in 09:59" -> 1, urgency (countdown)
+    "Hot Deal" -> 1, urgency (manufactured deal urgency)
+    "Lowest price since launch" -> 1, urgency (manufactured deal urgency)
+    "Only few left" -> 1, scarcity (low-stock pressure)
+    "Chain Bracelet RSD204.69 RSD309.66 7 bought this" -> 0, none (static cumulative total)
+    "Gel Heel Protectors 158 RSD 400K+ sold -64% 4.8 stars" -> 0, none (lifetime total, no timeframe)
+    "3 people bought this in the last hour" -> 1, social_proof (recency-framed activity)
+    "127 people are viewing this right now" -> 1, social_proof (live activity pressure)
+    "Selling fast" -> 1, social_proof (implied live demand)
+    "No thanks, I'll pay full price" -> 1, confirmshaming (guilt-framed decline)
+    "CABRRR Straight Fit Men Grey Jeans 69% off 1,299 396 3.9 (203) Only few left" -> 1, scarcity
+      (mostly-benign listing with an embedded tactic phrase - cite the phrase in reason)
+    
+    IMPORTANT: For purchase/view counts, the test is TIMEFRAME, not size. A count that implies
+    live or recent activity ("in the last hour", "right now", "viewing", "selling fast") is
+    social_proof = 1. A static cumulative total with no timeframe ("400K+ sold", "7 bought this",
+    "19 sold") is 0. Star ratings and review counts alone are 0.
     
     ELEMENTS:
     {numbered}
@@ -103,41 +123,61 @@ def insert_rows(rows_to_insert):
                 """, rows_to_insert
             )
 
-data = fetch_elements()
-text_to_ids = {}
-for id_,text in data:
-    text_to_ids.setdefault(text, []).append(id_)
 
-unique_texts = list(text_to_ids.keys())
+def main(n, model='gemini-3.5-flash-lite', only_unlabeled=True):
+    data = fetch_elements(only_unlabeled=only_unlabeled)
+    text_to_ids = {}
+    for id_, text in data:
+        text_to_ids.setdefault(text, []).append(id_)
+    unique_texts = list(text_to_ids.keys())
 
+    total_chunks = (len(unique_texts) + n - 1) // n
+    logger.info('Run start: %s rows, %s unique texts, %s chunks',
+                len(data), len(unique_texts), total_chunks)
 
-for i in range(0,len(unique_texts),50):
-    chunk = unique_texts[i:i+50]
+    failed = []
+    for i in range(0, len(unique_texts), n):
+        chunk = unique_texts[i:i + n]
+        result = None
 
-    if i >0:
-        time.sleep(5)
+        for attempt in (1, 2):                          # one automatic retry
+            if i > 0 or attempt > 1:
+                time.sleep(5)
+            try:
+                candidate = llm_labeler(chunk, model=model)
+            except Exception:
+                logger.exception('Chunk %s attempt %s: LLM call failed', i, attempt)
+                continue
 
-    try:
-        result = llm_labeler(chunk,model='gemini-3.1-flash-lite')
-    except Exception:
-        logger.exception('LLM labeler failed')
-        #continue
+            returned = sorted(e['index'] for e in candidate)
+            if returned == list(range(len(chunk))):
+                result = candidate
+                break
+            logger.warning('Chunk %s attempt %s: bad indices - got %s of %s',
+                           i, attempt, len(candidate), len(chunk))
 
-    returned = sorted(e['index'] for e in result)
-    if returned != list(range(len(chunk))):
-        logger.error('Chunk %s: bad indices - expected 0..%s, got %s results',
-                     i, len(chunk) - 1, len(result))
-        #continue
+        if result is None:
+            logger.error('Chunk %s: FAILED after retries', i)
+            failed.append(i)
+            continue
 
-    rows=[]
-    for element in result:
-        text = chunk[element['index']]
-        for id_ in text_to_ids[text]:
-            rows.append((element['label'],element['category'],element['reason'],id_))
-    try:
-        insert_rows(rows)
-        positives = sum(e['label'] for e in result)
-        logger.info('Chunk %s: %s texts, %s rows updated, %s positives',
-                    i, len(chunk), len(rows), positives)
-    except Exception:
-        logger.exception('Chunk %s: DB write failed', i)
+        rows = []
+        for element in result:
+            text = chunk[element['index']]
+            for id_ in text_to_ids[text]:
+                rows.append((element['label'], element['category'], element['reason'], id_))
+
+        try:
+            insert_rows(rows)
+            positives = sum(e['label'] for e in result)
+            logger.info('Chunk %s: %s texts, %s rows, %s positives',
+                        i, len(chunk), len(rows), positives)
+        except Exception:
+            logger.exception('Chunk %s: DB write failed', i)
+            failed.append(i)
+
+    logger.info('Run complete: %s of %s chunks failed: %s', len(failed), total_chunks, failed)
+    return failed
+
+if __name__ == '__main__':
+    main(20)

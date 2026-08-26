@@ -22,27 +22,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def capture_page(page):
-    page.wait_for_load_state('load',timeout=60000)
+    page.wait_for_load_state('load', timeout=60000)
     extracted_data = page.eval_on_selector_all(
-        'button,a,h1,h2,h3',
+        'button, a, h1, h2, h3, h4, h5, h6, p, span, div, label, li, small, strong, em',
         r'''els => els.map(el => {
             const r = el.getBoundingClientRect();
             const isVisible = r.width > 0 && r.height > 0;
+
+            const hasTextChild = Array.from(el.children).some(
+                c => c.innerText && c.innerText.trim() !== ''
+            );
+            if (hasTextChild) return null;
+
+            const text = (el.innerText || '').replace(/\s+/g, ' ').trim();
+            if (!text || text.length > 500) return null;
+
             return {
                 tag: el.tagName.toLowerCase(),
-                text: (el.innerText || '').replace(/\s+/g, ' ').trim(),
+                text: text,
                 x: isVisible ? r.left + window.pageXOffset : null,
                 y: isVisible ? r.top + window.pageYOffset : null,
                 width:  isVisible ? r.width  : null,
                 height: isVisible ? r.height : null
             };
-        })'''
+        }).filter(Boolean)'''
     )
 
     html_content = page.content()
     html_text = page.inner_text('body')
     screenshot = page.screenshot(full_page=True)
-    return  html_text,html_content,screenshot,extracted_data
+    return html_text, html_content, screenshot, extracted_data
 
 def get_llm_report(model:str,html_text):
 
@@ -192,8 +201,7 @@ def main(url,model):
 
 
 if __name__ == '__main__':
-    model = 'gemini-3.1-flash-lite'
-    url = 'https://m.shein.com/'
-    #for url in ['https://www.uniqlo.com/us/en/','https://www.torrid.com','https://www.qvc.com/','https://www.wish.com/','https://www.myntra.com/','https://www.shopsy.in/','https://www.alibaba.com/']:
+    model = 'gemini-3.5-flash-lite'
+    url = 'https://www.burlington.com/'
     main(url,model)
 
