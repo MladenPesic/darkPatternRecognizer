@@ -3,9 +3,9 @@ CREATE TABLE IF NOT EXISTS scans (
     date_time timestamptz NOT NULL DEFAULT now(),
     url TEXT NOT NULL,
     html_pointer TEXT,
-    screenshot_pointer TEXT,
-    llm_report TEXT,
-    status TEXT NOT NULL DEFAULT 'pending'
+    status TEXT NOT NULL DEFAULT 'pending',
+    page_height INTEGER,
+    page_width INTEGER
     );
 
 
@@ -18,9 +18,6 @@ CREATE TABLE IF NOT EXISTS elements(
     geometry_y REAL,
     geometry_width REAL,
     geometry_height REAL,
-    darkpattern_label SMALLINT,
-    confidence REAL,
     llm_label SMALLINT,
-    llm_category TEXT,
     llm_reason TEXT
 );

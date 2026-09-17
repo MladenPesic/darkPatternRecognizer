@@ -52,8 +52,8 @@ train_index,validation_index,test_index = set(train_set.index),set(validation_se
 len(train_index & test_index)
 len(train_index & validation_index)
 len(validation_index & test_index)
-for set in [train_set,validation_set,test_set]:
-    print(set['llm_label'].value_counts(normalize=True))
+for split_df in [train_set,validation_set,test_set]:
+    print(split_df['llm_label'].value_counts(normalize=True))
 
 counts = train_set['llm_label'].value_counts()
 total = len(train_set)

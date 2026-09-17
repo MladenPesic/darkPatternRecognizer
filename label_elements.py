@@ -4,6 +4,7 @@ import os,time
 import psycopg
 import json
 import logging
+import random
 
 load_dotenv(override=True)
 
@@ -24,7 +25,7 @@ def fetch_elements(only_unlabeled=False):
         FROM elements
         WHERE element_text IS NOT NULL
           AND TRIM(element_text) <> ''
-          AND geometry_width IS NOT NULL
+          AND geometry_width >0 And geometry_height >0
     """
     if only_unlabeled:
         query += " AND llm_label IS NULL"
@@ -117,27 +118,29 @@ def insert_rows(rows_to_insert):
                 UPDATE elements
                 SET 
                     llm_label = %s,
-                    llm_category = %s,
                     llm_reason = %s
                 WHERE id = %s;
                 """, rows_to_insert
             )
 
 
-def main(n, model='gemini-3.5-flash-lite', only_unlabeled=True):
+def main(chunk_size, model='gemini-3.5-flash-lite', only_unlabeled=True,limit=None):
+    random.seed(42)
     data = fetch_elements(only_unlabeled=only_unlabeled)
     text_to_ids = {}
     for id_, text in data:
         text_to_ids.setdefault(text, []).append(id_)
     unique_texts = list(text_to_ids.keys())
+    if limit:
+        unique_texts = random.sample(unique_texts, min(limit,len(unique_texts)))
 
-    total_chunks = (len(unique_texts) + n - 1) // n
+    total_chunks = (len(unique_texts) + chunk_size - 1) // chunk_size
     logger.info('Run start: %s rows, %s unique texts, %s chunks',
                 len(data), len(unique_texts), total_chunks)
 
     failed = []
-    for i in range(0, len(unique_texts), n):
-        chunk = unique_texts[i:i + n]
+    for i in range(0, len(unique_texts), chunk_size):
+        chunk = unique_texts[i:i + chunk_size]
         result = None
 
         for attempt in (1, 2):                          # one automatic retry
@@ -165,7 +168,7 @@ def main(n, model='gemini-3.5-flash-lite', only_unlabeled=True):
         for element in result:
             text = chunk[element['index']]
             for id_ in text_to_ids[text]:
-                rows.append((element['label'], element['category'], element['reason'], id_))
+                rows.append((element['label'], element['reason'], id_))
 
         try:
             insert_rows(rows)
@@ -180,4 +183,4 @@ def main(n, model='gemini-3.5-flash-lite', only_unlabeled=True):
     return failed
 
 if __name__ == '__main__':
-    main(20)
+    main(chunk_size=30,only_unlabeled=True)

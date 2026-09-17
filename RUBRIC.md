@@ -5,14 +5,21 @@ Both the Gemini labeling prompt (`label_elements.py`) and any manual labeling MU
 this file. When a new edge case comes up: decide it here first, then update the prompt —
 never make the call ad hoc, or the training labels and the gold test set silently diverge.
 
-**Version:** 1.1 — 2026-07-26
+**Version:** 1.2 — 2026-09-14
 
 ---
 
 ## 1. The task
 
-Binary classification of a single web-page **element text** (the visible text of one
-`button` / `a` / `h1` / `h2` / `h3` element as captured by the scraper).
+Binary classification of a single web-page **element text**, as captured by the scraper:
+any leaf text node matching
+`button, a, h1–h6, p, span, div, label, li, small, strong, em`, capped at 500 characters.
+
+"Leaf" means the element carries its own text — elements whose children hold the text are
+skipped, so a product card does not appear as one concatenated blob.
+
+Only **visible** elements are labeled: `geometry_width > 0 AND geometry_height > 0`.
+Zero-size elements are collapsed menu contents and similar, and are excluded.
 
 - `1` = the text employs a manipulative tactic
 - `0` = it does not
@@ -48,6 +55,9 @@ Binary classification of a single web-page **element text** (the visible text of
 
 `urgency` · `scarcity` · `social_proof` · `confirmshaming` · `forced_action` ·
 `misdirection` · `none`
+
+The category is requested in the labeling prompt but **not stored**. Naming the tactic
+before emitting 0/1 measurably steadies borderline calls; the label is the deliverable.
 
 ---
 
@@ -130,22 +140,61 @@ If a mostly-benign block (e.g. a product card with title, price, rating) contain
 
 ## 5. Open questions (unresolved — decide before they matter)
 
-- **`#1 Bestseller` = 0 but any purchase count = 1.** Resolved pragmatically in §4.1: a
-  *count* of purchases is activity data used for bandwagon pressure; a *badge* is a static
-  descriptive claim. The line is defensible but not airtight — revisit if it causes label noise.
-- **Price anchoring alone** (struck-through price + `-50%`, with no urgency/scarcity/
-  social-proof phrase). Currently treated as `0` under tactic-not-topic, but Mathur's
-  taxonomy treats misleading reference pricing as a dark pattern.
+Items 5.3–5.6 surfaced during the v1.2 labeling run. They are recorded here rather than
+resolved: the labels as produced are being kept, and the ambiguity is itself a finding.
+
+### 5.1 Badge vs. count
+`#1 Bestseller` = 0 but activity-framed counts = 1. Resolved pragmatically in §4.1: a
+*count* of purchases is activity data used for bandwagon pressure; a *badge* is a static
+descriptive claim. Defensible but not airtight — revisit if it causes label noise.
+
+### 5.2 Price anchoring alone
+Struck-through price + `-50%`, with no urgency/scarcity/social-proof phrase. Currently `0`
+under tactic-not-topic, but Mathur's taxonomy treats misleading reference pricing as a dark
+pattern.
+
+### 5.3 Purchase limits
+`Max. Order: 2 Piece`, `Max. 1 pcs/shopper`. A cap on quantity manufactures scarcity by
+implication, but it can equally be a genuine supply constraint or an anti-reseller measure.
+The rubric does not currently cover purchase caps, and they have been labeled inconsistently
+as a result.
+
+### 5.4 Weasel discounts
+`Up to 35% off` vs `40% off`. The "up to" hedge arguably makes the first misdirection — the
+advertised figure may apply to almost nothing. But the rubric contains no rule about hedged
+quantifiers, so this is currently instinct rather than policy.
+
+### 5.5 Timeframe granularity
+§4.1 turns on whether a timeframe is implied, but does not say how recent it must be.
+`added to cart 4 mins ago` is plainly live activity; `bought in last month` is plainly not
+pressure; the boundary between them is undefined.
+
+### 5.6 Context-dependent strings
+`18 hrs` is most likely a delivery estimate, but read as a countdown it is urgency. The
+string alone cannot settle it — **only its position on the page can.** This is a clean
+illustration of the project's core hypothesis and should be cited as such in the writeup.
+
+### 5.7 User-generated content
+Scraped customer reviews appear in the dataset and can read as manipulative in isolation.
+Reviews are not interface design. Decide whether UGC belongs in the label space at all, or
+should be filtered before labeling.
 
 ---
 
 ## 6. Change log
+
+- **1.2 (2026-09-14)** — updated §1 to match the current scraper (fifteen-tag leaf-node
+  selector, 500-character cap, visible elements only) — the previous description was left
+  over from the five-tag selector. Noted in §3 that `category` is prompted but not stored.
+  Added open questions §5.3–§5.7 from the v1.2 labeling run. **No labels were changed.**
 
 - **1.1 (2026-07-26)** — narrowed the purchase-count rule (§4.1) from "all counts = 1" to
   "activity/recency-framed = 1, static cumulative totals = 0", after a full labeling run
   showed the broad rule made 92% of positives a single regex-solvable pattern. Added
   `Cyber Sale in July` / `Currently Trending` = 0 to kill sale-name and section-header drift.
   **All labels produced under v1.0 are stale and must be regenerated.**
+  *(Resolved: the v1.0 dataset was discarded entirely and the corpus re-collected and
+  re-labeled under v1.1. No v1.0 labels remain.)*
 
 - **1.0 (2026-07-26)** — initial version. Consolidates decisions made during Phase 3/4
   labeling. Key decision: large cumulative sold-counts (`400K+ sold`) = `1`; this
