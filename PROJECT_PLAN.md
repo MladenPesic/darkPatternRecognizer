@@ -1,9 +1,10 @@
 # darkPatternRecognizer — Project Plan
 
-**Status:** Phase 0 cleanup complete. Data collection and labeling complete. Modelling
+**Status:** Phase 0 cleanup complete. Data collection and labeling complete.
+Phase A complete — the split is frozen in `splits.json`. Modelling (Phase B)
 not started.
 **Repo:** https://github.com/MladenPesic/darkPatternRecognizer
-**Last updated:** 17 September 2026
+**Last updated:** 22 September 2026
 
 ---
 
@@ -54,8 +55,8 @@ unique text once, from the text alone — the labeler never sees the page. A
 geometry feature therefore cannot be credited with information the text lacks,
 because the answer key does not contain it: two copies of `"18 hrs"` carry the
 same label whether one is a countdown and the other a delivery estimate. What
-the data can test is generalisation — with ~60 positive templates in training,
-does geometry help on an unseen brand? See §8 D5.
+the data can test is generalisation — with 56–75 positive templates in training
+(depending on the split), does geometry help on an unseen brand? See §8 D5.
 
 Everything below serves answering that question credibly.
 
@@ -120,8 +121,9 @@ Text-level positive rate **1.2%**; row-level **2.24%**.
 
 ### The template collapse — most important fact in this document
 
-The 179 positive texts collapse to **~60 templates** once digits are
-normalised. Top five:
+The 179 positive texts collapse to **82 templates** once digits are normalised.
+*(Measured in Phase A over visible rows with `re.sub(r'\d+', 'N', text.lower())`.
+This section previously said ~60, an earlier and less careful count.)* Top five:
 
 | template | variants |
 |---|---|
@@ -136,7 +138,9 @@ The top four account for 79 of 179. Fifteen templates appear exactly once.
 **Consequences:**
 1. Any split at the text level leaks. `"22 people viewing now"` in train and
    `"43 people viewing now"` in test is the same string with a different integer.
-2. The effective positive class size is ~60, not 179.
+2. The effective positive class size is 82, not 179. 75 of the 82 appear on
+   exactly one brand, 6 on two, 1 on three — so template counts across brands
+   must be combined as a **union**, never summed.
 3. Anywhere diversity is reported, normalise digits first:
    `regexp_replace(lower(text), '\d+', 'N', 'g')`.
 
@@ -237,29 +241,44 @@ is easier to review than cleanup mixed into modelling work.
 
 ---
 
-## 5. Phase A — Freeze the dataset split
+## 5. Phase A — Freeze the dataset split — COMPLETE (22 September 2026)
 
 Nothing downstream is meaningful until this is right.
 
 **All collected brands are retained.** No domain is excluded from the dataset —
-the split assigns brands to train/val/test, it does not drop them.
+the split assigns brands to train/test, it does not drop them.
+
+**Outcome:** `brands.json` (29 hosts → 24 brands), `build_splits.py`, and
+`splits.json` (five accepted splits, canonical seed 5). Rationale for every
+choice below is in `DECISIONS.md`. The text of A2/A3 was updated on 22 September
+2026 to match what was actually built; the original wording is preserved in the
+git history.
 
 ### A1. Brand grouping
 
-Hosts do not map 1:1 to retailers. Build an explicit mapping — a dict, not a
-regex — so grouping decisions are visible and reviewable:
+Hosts do not map 1:1 to retailers. The mapping is an explicit dict — not a regex
+— so grouping decisions are visible and reviewable. It lives in **`brands.json`**,
+which is the single source of truth; Phase E needs it at inference time and
+Phase F1 builds `dim_brand` from it.
+
+It covers all **29 hosts** in the data and produces **24 brands**. Five brands
+have more than one host:
 
 ```
-www.hm.com, www2.hm.com                                  -> hm
-www.zara.com, account.zara.com                           -> zara
-www.zalando.co.uk, www.zalando.com, accounts.zalando.com -> zalando
-www.gap.com, oldnavy.gap.com                             -> gap
-www.banggood.com, m.banggood.com                         -> banggood
-roe.shein.com                                            -> shein
+www.hm.com, www2.hm.com                     -> hm
+www.zara.com, account.zara.com              -> zara
+www.zalando.co.uk, accounts.zalando.com     -> zalando
+www.gap.com, oldnavy.gap.com                -> gap
+www.banggood.com, m.banggood.com            -> banggood
 ```
 
 Gap and Old Navy share a parent and a platform; treating them as independent
-would leak templates. Record the reasoning either way.
+would leak templates. Decided as **one brand** — see `DECISIONS.md`.
+
+Note two hosts that no `www.`-stripping heuristic reduces correctly:
+`shop.mango.com` and `www.muji.eu`. This is why the mapping is written by hand.
+A host missing from `brands.json` raises; it must never fall back to becoming
+its own brand.
 
 ### A2. Split assignment
 
@@ -267,7 +286,7 @@ Split **by brand, drawn randomly under constraints** — not by hand.
 *(Decided 19 September 2026; this reverses the earlier recommendation to assign
 brands by hand.)*
 
-Grouping by brand is non-negotiable: the ~60 positive templates differ only by
+Grouping by brand is non-negotiable: the 82 positive templates differ only by
 digits, so a row- or text-level split puts `"22 people viewing now"` in train and
 `"43 people viewing now"` in test, and recall then measures memorisation. Worse
 for this project, elements from one brand share a page template, so geometry
@@ -276,31 +295,59 @@ having learned nothing transferable. And since the claim is generalisation to an
 unseen brand (§1), an ungrouped split has nothing left to measure.
 
 Hand-picking the test brands is a separate matter, and it invites the objection
-that the test set was chosen to flatter the result. Draw it instead:
+that the test set was chosen to flatter the result. It is drawn instead:
+`sorted()` the 24 brand names, shuffle with a seeded RNG, take the first 5 as
+test and the remaining 19 as train. No sklearn — the draw is a shuffle of 24
+strings, and the rejection loop has to be written by hand anyway.
 
-- `GroupShuffleSplit` (or equivalent) with **brand as the group** and a fixed
-  seed, roughly 60/20/20 by brand.
-- **Redraw until the constraints hold:** test contains at least 25 positives,
-  and at least two zero-positive brands. With 59% of positives in two domains a
-  naive draw can leave test nearly empty, which is what the hand-assignment was
-  guarding against; the constraint handles it without choosing the winner.
-- Record the seed, the number of draws rejected, and the final assignment.
+**The draw is redrawn until three rules hold.** All three count
+**digit-normalised positive templates**, combined as a **union** across brands,
+never a sum (the per-brand counts sum to 90; the true union is 82):
 
-**Stronger, if time allows:** draw several constraint-satisfying splits with
-different seeds and report each metric as a mean and spread across them. One
-split with ~35 test positives is a noisy measurement; five make the ablation far
-harder to dismiss. Pick one split as canonical for error analysis.
+| # | applies to | rule | draws passing |
+|---|---|---|---|
+| 1 | test | at least 12 positive templates | 82.5% |
+| 2 | test | at least 2 zero-positive brands | 36.0% |
+| 3 | train | at least 45 of the 82 positive templates | 100% |
 
-Write the assignment to a committed file (`splits.json` or similar). It must not
-be regenerated at runtime — a split that changes between runs invalidates every
-comparison.
+Rule 3 constrains the *train* side. Without it a draw can pass rules 1 and 2
+while leaving train with ~89 positive rows, and a bad result then cannot be told
+apart from starved training data. It never bound in practice — recorded as such.
+
+**Result:** seeds 0–199 scanned, **46 accepted**. The **first five accepted
+seeds in ascending order (5, 6, 7, 9, 15)** are the splits; **seed 5 is
+canonical** for error analysis. Every metric is reported as a mean and spread
+across the five — what this section previously listed as "stronger, if time
+allows". The selection rule was fixed before any split was inspected.
+
+**No fixed validation set.** 19 train / 5 test. The decision threshold is tuned
+on out-of-fold predictions from 5-fold cross-validation grouped by brand inside
+train; fold assignments are recorded in `splits.json`. A random 5-brand
+validation set can contain almost no positives, and every P/R/F1 number would
+rest on a threshold tuned on a handful of examples. This supersedes the earlier
+60/20/20.
+
+`splits.json` is committed and is the frozen record: seeds scanned and accepted,
+the rules, the five assignments, the folds, and per-split counts. It must not be
+regenerated at runtime — a split that changes between runs invalidates every
+comparison. `build_splits.py` refuses to overwrite it without `--force`, and
+warns if the data no longer reproduces it.
 
 ### A3. Leakage assertion
 
+Verification reads `splits.json` back **from disk**, not from the objects in
+memory — the file is what every later phase uses, so the file is what must be
+proved correct. Checks use `raise`, not `assert`, because `python -O` strips
+asserts.
+
 **Hard failures** — the script exits non-zero:
-- any brand appears in more than one split
+- any brand appears in more than one split, or is missing from the split entirely
+- the folds do not cover exactly the train brands, or a brand is in two folds
 - any scan_id appears in more than one split
-- test positive count falls below 25
+- any of the three draw rules is violated by the saved file
+- `llm_label` holds any value other than 0 or 1
+- a host in the data is missing from `brands.json`
+- a fold contains no positive rows
 
 **Reported, not fatal:** the share of test positive templates (digit-normalised)
 that also occur in train. This cannot be driven to zero — `only N left` appears
@@ -312,8 +359,21 @@ positives whose template was **seen in train** and those whose template is
 **unseen**. The unseen group is the honest measure of generalisation, and it is
 where geometry should help if the hypothesis holds.
 
-**Deliverable:** `splits.json`, a split-building script, and a passing leakage
-assertion.
+**Deliverable — done.** `brands.json`, `build_splits.py`, `splits.json`, and a
+passing set of assertions. The five accepted splits, measured on visible rows:
+
+| seed | test brands | test rows | test pos rows | test templates | unseen in train | calm brands | train pos rows | train templates |
+|---|---|---|---|---|---|---|---|---|
+| **5** | gap, muji, temu, wish, zalando | 12,785 | 266 | 29 | **26** | 2 | 764 | 56 |
+| 6 | gap, muji, nordstrom, walmart, zalando | 8,043 | 155 | 14 | 12 | 2 | 875 | 70 |
+| 7 | banggood, burlington, patagonia, temu, zalando | 7,909 | 111 | 20 | 17 | 3 | 919 | 65 |
+| 9 | aliexpress, apple, burlington, shein, zalando | 12,864 | 42 | 12 | 7 | 2 | 988 | 75 |
+| 15 | dhgate, hm, patagonia, target, zara | 8,126 | 537 | 15 | 12 | 3 | 493 | 70 |
+
+"Unseen in train" is the D4 group that matters. Limitations of this split — the
+five draws are not independent, zalando carries most of the D2 measurement, and
+dhgate dominates threshold tuning — are written up in `DECISIONS.md` and belong
+in the README.
 
 ---
 
@@ -353,7 +413,7 @@ and cannot isolate the contribution of geometry.
 
 ### C1. Architecture
 
-**Do not fine-tune a full transformer on ~60 positive templates.** It will
+**Do not fine-tune a full transformer on 82 positive templates.** It will
 memorise them. Use a frozen encoder as a feature extractor:
 
 1. Frozen DistilBERT (or a sentence-transformer) → mean-pooled embedding
@@ -385,8 +445,10 @@ measured at capture time — do not infer page size from the largest element.
 ### C3. Class imbalance
 
 At 2.24% positive rows, handle explicitly: class weights (already computed in
-`train_fusion.py`), or focal loss, or threshold tuning on validation. Choose one
-and justify it. Do not resample in a way that duplicates templates.
+`train_fusion.py`), or focal loss, or threshold tuning. Choose one and justify
+it. Note there is no held-out validation set (§5 A2): any threshold is tuned on
+out-of-fold predictions from the brand-grouped 5-fold CV inside train, using the
+fold assignment recorded in `splits.json`. Do not resample in a way that duplicates templates.
 
 ---
 
@@ -398,20 +460,25 @@ and justify it. Do not resample in a way that duplicates templates.
 
 Report:
 - **PR-AUC** (primary)
-- precision, recall, F1 at a validation-tuned threshold
+- precision, recall, F1 at a threshold tuned on out-of-fold predictions within
+  train (§5 A2 — there is no separate validation split)
 - the absolute count of test positives, always, next to every metric
-- bootstrap confidence intervals — with ~35 test positives, point estimates are
-  unstable and stating them bare is misleading
+- bootstrap confidence intervals — test positives range from 42 to 537 rows
+  across the five splits (§5 A3), so point estimates are unstable and stating
+  them bare is misleading
 
 ### D2. The headline evaluation
 
 **False positive rate on the zero-positive brands that landed in the test
-split** (candidates: Patagonia, Muji, Zalando, H&M, Burlington, Zara — which of
-them are in test is decided by the draw in A2, and the constraint guarantees at
-least two). Measure this on test brands only; a brand used in training cannot
+split.** Measure this on test brands only; a brand used in training cannot
 measure false positives. This directly measures the failure that motivated the
 whole project. Phase 3 scored ~2.5% precision because it fired constantly on ordinary
 commercial text. A low FP rate here is the result worth leading with.
+
+The draw settled which calm brands are testable in each split. Across the five:
+zalando appears in test 4 times, muji, burlington and patagonia twice each, hm
+and zara once. All six are covered at least once, but **the pooled figure is
+mostly zalando** — state that rather than letting a reader find it.
 
 ### D3. Ablation table
 
@@ -439,7 +506,7 @@ First, the labels were produced from text alone, so no result here can show that
 geometry carries information the text does not. The claim the data supports is
 about generalisation to unseen brands.
 
-Second, with ~60 templates and 59% of positives from two domains, the defensible
+Second, with 82 templates and 59% of positives from two domains, the defensible
 claim is **"geometry helps on this dataset"**, not "geometry helps. Precision about what the data supports is
 the skill being demonstrated.
 
@@ -533,12 +600,24 @@ A through D cannot — each depends on the last.
 
 ## 13. Decision log for this phase
 
-Record the answers in `DECISIONS.md` as they are made:
+Record the answers in `DECISIONS.md` as they are made.
 
-- **Decided 19 Sep 2026:** brands are grouped, and the test set is drawn
-  randomly under constraints rather than hand-picked (§5 A2). Record the seed,
-  the rejected-draw count, and the resulting assignment.
-- Whether Gap and Old Navy are one brand or two
+**Settled, written up in `DECISIONS.md`:**
+
+- **19 Sep 2026** — brands are grouped, and the test set is drawn randomly under
+  constraints rather than hand-picked (§5 A2).
+- **19 Sep 2026** — Gap and Old Navy are **one brand**.
+- **22 Sep 2026** — draw constraints are counted in digit-normalised templates
+  (union, not sum), and a third rule protects the train side.
+- **22 Sep 2026** — no fixed validation set; the threshold is tuned by
+  brand-grouped 5-fold CV inside train.
+- **22 Sep 2026** — five splits (seeds 5, 6, 7, 9, 15), seed 5 canonical; 46 of
+  200 seeds accepted.
+
+**Still open:**
+
 - Fusion head: MLP or gradient boosting
 - Imbalance strategy: class weights, focal loss, or threshold tuning
 - Whether scraped customer reviews stay in the dataset
+- The SHEIN rolling-digit price widgets — dozens of one-character rows per scan
+  that will skew the `text_count` feature. Decide a filter before Phase C.
