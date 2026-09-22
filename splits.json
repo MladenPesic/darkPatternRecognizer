@@ -1,0 +1,432 @@
+{
+  "brands_source": "brands.json",
+  "seeds_scanned": 200,
+  "seeds_accepted": 46,
+  "selection_rule": "first 5 accepted seeds, ascending",
+  "selected_seeds": [
+    5,
+    6,
+    7,
+    9,
+    15
+  ],
+  "canonical_seed": 5,
+  "rules": {
+    "test_brands": 5,
+    "min_test_positive_templates": 12,
+    "min_test_zero_positive_brands": 2,
+    "min_train_positive_templates": 45
+  },
+  "splits": [
+    {
+      "seed": 5,
+      "canonical": true,
+      "test": [
+        "gap",
+        "muji",
+        "temu",
+        "wish",
+        "zalando"
+      ],
+      "train": [
+        "ae",
+        "alibaba",
+        "aliexpress",
+        "apple",
+        "asos",
+        "banggood",
+        "bestbuy",
+        "burlington",
+        "dhgate",
+        "hm",
+        "macys",
+        "mango",
+        "nordstrom",
+        "patagonia",
+        "shein",
+        "target",
+        "uniqlo",
+        "walmart",
+        "zara"
+      ],
+      "folds": {
+        "1": [
+          "dhgate",
+          "target",
+          "apple",
+          "burlington"
+        ],
+        "2": [
+          "macys",
+          "aliexpress",
+          "asos",
+          "hm"
+        ],
+        "3": [
+          "alibaba",
+          "banggood",
+          "mango",
+          "patagonia"
+        ],
+        "4": [
+          "uniqlo",
+          "bestbuy",
+          "nordstrom",
+          "zara"
+        ],
+        "5": [
+          "shein",
+          "ae",
+          "walmart"
+        ]
+      },
+      "counts": {
+        "test": {
+          "brands": 5,
+          "rows": 12785,
+          "positive_rows": 266,
+          "positive_templates": 29,
+          "zero_positive_brands": 2
+        },
+        "train": {
+          "brands": 19,
+          "rows": 33192,
+          "positive_rows": 764,
+          "positive_templates": 56,
+          "zero_positive_brands": 4
+        }
+      },
+      "reported": {
+        "test_templates_also_in_train": 3
+      }
+    },
+    {
+      "seed": 6,
+      "canonical": false,
+      "test": [
+        "gap",
+        "muji",
+        "nordstrom",
+        "walmart",
+        "zalando"
+      ],
+      "train": [
+        "ae",
+        "alibaba",
+        "aliexpress",
+        "apple",
+        "asos",
+        "banggood",
+        "bestbuy",
+        "burlington",
+        "dhgate",
+        "hm",
+        "macys",
+        "mango",
+        "patagonia",
+        "shein",
+        "target",
+        "temu",
+        "uniqlo",
+        "wish",
+        "zara"
+      ],
+      "folds": {
+        "1": [
+          "dhgate",
+          "shein",
+          "bestbuy",
+          "burlington"
+        ],
+        "2": [
+          "temu",
+          "target",
+          "ae",
+          "hm"
+        ],
+        "3": [
+          "macys",
+          "aliexpress",
+          "apple",
+          "patagonia"
+        ],
+        "4": [
+          "alibaba",
+          "wish",
+          "asos",
+          "zara"
+        ],
+        "5": [
+          "uniqlo",
+          "banggood",
+          "mango"
+        ]
+      },
+      "counts": {
+        "test": {
+          "brands": 5,
+          "rows": 8043,
+          "positive_rows": 155,
+          "positive_templates": 14,
+          "zero_positive_brands": 2
+        },
+        "train": {
+          "brands": 19,
+          "rows": 37934,
+          "positive_rows": 875,
+          "positive_templates": 70,
+          "zero_positive_brands": 4
+        }
+      },
+      "reported": {
+        "test_templates_also_in_train": 2
+      }
+    },
+    {
+      "seed": 7,
+      "canonical": false,
+      "test": [
+        "banggood",
+        "burlington",
+        "patagonia",
+        "temu",
+        "zalando"
+      ],
+      "train": [
+        "ae",
+        "alibaba",
+        "aliexpress",
+        "apple",
+        "asos",
+        "bestbuy",
+        "dhgate",
+        "gap",
+        "hm",
+        "macys",
+        "mango",
+        "muji",
+        "nordstrom",
+        "shein",
+        "target",
+        "uniqlo",
+        "walmart",
+        "wish",
+        "zara"
+      ],
+      "folds": {
+        "1": [
+          "dhgate",
+          "shein",
+          "ae",
+          "walmart"
+        ],
+        "2": [
+          "gap",
+          "target",
+          "apple",
+          "hm"
+        ],
+        "3": [
+          "macys",
+          "aliexpress",
+          "asos",
+          "muji"
+        ],
+        "4": [
+          "alibaba",
+          "wish",
+          "mango",
+          "zara"
+        ],
+        "5": [
+          "uniqlo",
+          "bestbuy",
+          "nordstrom"
+        ]
+      },
+      "counts": {
+        "test": {
+          "brands": 5,
+          "rows": 7909,
+          "positive_rows": 111,
+          "positive_templates": 20,
+          "zero_positive_brands": 3
+        },
+        "train": {
+          "brands": 19,
+          "rows": 38068,
+          "positive_rows": 919,
+          "positive_templates": 65,
+          "zero_positive_brands": 3
+        }
+      },
+      "reported": {
+        "test_templates_also_in_train": 3
+      }
+    },
+    {
+      "seed": 9,
+      "canonical": false,
+      "test": [
+        "aliexpress",
+        "apple",
+        "burlington",
+        "shein",
+        "zalando"
+      ],
+      "train": [
+        "ae",
+        "alibaba",
+        "asos",
+        "banggood",
+        "bestbuy",
+        "dhgate",
+        "gap",
+        "hm",
+        "macys",
+        "mango",
+        "muji",
+        "nordstrom",
+        "patagonia",
+        "target",
+        "temu",
+        "uniqlo",
+        "walmart",
+        "wish",
+        "zara"
+      ],
+      "folds": {
+        "1": [
+          "dhgate",
+          "uniqlo",
+          "ae",
+          "hm"
+        ],
+        "2": [
+          "gap",
+          "target",
+          "asos",
+          "muji"
+        ],
+        "3": [
+          "temu",
+          "wish",
+          "mango",
+          "patagonia"
+        ],
+        "4": [
+          "macys",
+          "banggood",
+          "nordstrom",
+          "zara"
+        ],
+        "5": [
+          "alibaba",
+          "bestbuy",
+          "walmart"
+        ]
+      },
+      "counts": {
+        "test": {
+          "brands": 5,
+          "rows": 12864,
+          "positive_rows": 42,
+          "positive_templates": 12,
+          "zero_positive_brands": 2
+        },
+        "train": {
+          "brands": 19,
+          "rows": 33113,
+          "positive_rows": 988,
+          "positive_templates": 75,
+          "zero_positive_brands": 4
+        }
+      },
+      "reported": {
+        "test_templates_also_in_train": 5
+      }
+    },
+    {
+      "seed": 15,
+      "canonical": false,
+      "test": [
+        "dhgate",
+        "hm",
+        "patagonia",
+        "target",
+        "zara"
+      ],
+      "train": [
+        "ae",
+        "alibaba",
+        "aliexpress",
+        "apple",
+        "asos",
+        "banggood",
+        "bestbuy",
+        "burlington",
+        "gap",
+        "macys",
+        "mango",
+        "muji",
+        "nordstrom",
+        "shein",
+        "temu",
+        "uniqlo",
+        "walmart",
+        "wish",
+        "zalando"
+      ],
+      "folds": {
+        "1": [
+          "gap",
+          "shein",
+          "ae",
+          "walmart"
+        ],
+        "2": [
+          "temu",
+          "aliexpress",
+          "apple",
+          "burlington"
+        ],
+        "3": [
+          "macys",
+          "wish",
+          "asos",
+          "muji"
+        ],
+        "4": [
+          "alibaba",
+          "banggood",
+          "mango",
+          "zalando"
+        ],
+        "5": [
+          "uniqlo",
+          "bestbuy",
+          "nordstrom"
+        ]
+      },
+      "counts": {
+        "test": {
+          "brands": 5,
+          "rows": 8126,
+          "positive_rows": 537,
+          "positive_templates": 15,
+          "zero_positive_brands": 3
+        },
+        "train": {
+          "brands": 19,
+          "rows": 37851,
+          "positive_rows": 493,
+          "positive_templates": 70,
+          "zero_positive_brands": 3
+        }
+      },
+      "reported": {
+        "test_templates_also_in_train": 3
+      }
+    }
+  ]
+}

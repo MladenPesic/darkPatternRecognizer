@@ -1,0 +1,100 @@
+{
+  "mappings": [
+    {
+      "brand": "hm",
+      "domains": ["www.hm.com", "www2.hm.com"]
+    },
+    {
+      "brand": "zara",
+      "domains": ["www.zara.com", "account.zara.com"]
+    },
+    {
+      "brand": "gap",
+      "domains": ["www.gap.com", "oldnavy.gap.com"]
+    },
+    {
+      "brand": "zalando",
+      "domains": ["www.zalando.co.uk", "accounts.zalando.com"]
+    },
+    {
+      "brand": "banggood",
+      "domains": ["www.banggood.com", "m.banggood.com"]
+    },
+    {
+      "brand": "dhgate",
+      "domains": ["www.dhgate.com"]
+    },
+    {
+      "brand": "temu",
+      "domains": ["www.temu.com"]
+    },
+    {
+      "brand": "macys",
+      "domains": ["www.macys.com"]
+    },
+    {
+      "brand": "alibaba",
+      "domains": ["www.alibaba.com"]
+    },
+    {
+      "brand": "uniqlo",
+      "domains": ["www.uniqlo.com"]
+    },
+    {
+      "brand": "shein",
+      "domains": ["roe.shein.com"]
+    },
+    {
+      "brand": "target",
+      "domains": ["www.target.com"]
+    },
+    {
+      "brand": "aliexpress",
+      "domains": ["www.aliexpress.com"]
+    },
+    {
+      "brand": "wish",
+      "domains": ["www.wish.com"]
+    },
+    {
+      "brand": "bestbuy",
+      "domains": ["www.bestbuy.com"]
+    },
+    {
+      "brand": "mango",
+      "domains": ["shop.mango.com"]
+    },
+    {
+      "brand": "nordstrom",
+      "domains": ["www.nordstrom.com"]
+    },
+    {
+      "brand": "apple",
+      "domains": ["www.apple.com"]
+    },
+    {
+      "brand": "asos",
+      "domains": ["www.asos.com"]
+    },
+    {
+      "brand": "ae",
+      "domains": ["www.ae.com"]
+    },
+    {
+      "brand": "walmart",
+      "domains": ["www.walmart.com"]
+    },
+    {
+      "brand": "patagonia",
+      "domains": ["www.patagonia.com"]
+    },
+    {
+      "brand": "muji",
+      "domains": ["www.muji.eu"]
+    },
+    {
+      "brand": "burlington",
+      "domains": ["www.burlington.com"]
+    }
+  ]
+}
